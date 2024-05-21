@@ -1,13 +1,16 @@
 ; have two characters move from the row at the 
 ; center of the screen to the middle and back again
 org 100h
+
 mov ax, 0xb800
 mov es, ax
 jmp dancingChar
+
 delay:
     mov cx, 64000
     badloop: loop badloop
     ret
+
 dancingChar:
     pusha
     mov di, 1920 ;center
@@ -38,4 +41,5 @@ dancingChar:
         sub bx, 2
         cmp bx, 0
         ja movementOut
+    popa
     jmp dancingChar

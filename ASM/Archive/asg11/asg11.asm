@@ -4,8 +4,7 @@ org 100h
 jmp start 
 
 ;timekeeping
-ticks: dw 0 
-tick2: dd 0
+ticks: dd 0
 seconds: dw 0 
 minutes: dw 0 
 hours: dw 0 
@@ -93,16 +92,16 @@ TT_ISR:
         
     ;time b/w 2 ticks = 0.0549254s = 54.92ms = 54.92 _s
     ; 1 second = 1000ms = 100,000 _s where _s is ms*10^2
-    ;so now, all we need to do is check if 'tick2' has surpassed
+    ;so now, all we need to do is check if 'ticks' has surpassed
     ;100,000, and if it has, reset it
     
     quotientNotMil:
         ;increment ticks
-        add dword [tick2], 5492
-        cmp dword [tick2], 100000
+        add dword [ticks], 5492
+        cmp dword [ticks], 100000
         jnae noMoreInc
         inc word [seconds]
-        sub dword [tick2], 100000
+        sub dword [ticks], 100000
 
         ;inc minute if 60 seconds
         cmp word [seconds], 60

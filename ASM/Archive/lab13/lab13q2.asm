@@ -30,6 +30,7 @@ printRect:
         add di, bx
         mov bx, 0
         loop outer
+
     popa
     pop bp
     ret
