@@ -1,4 +1,4 @@
-;Program to toggle a stopwatch by pressing left shift
+; Program to toggle a stopwatch by pressing left shift
 org 100h
 
 jmp start 
@@ -20,12 +20,8 @@ oldtt: dd 0
 printnum:     
     push bp 
     mov bp, sp 
-    push es 
-    push ax 
-    push bx 
-    push cx 
-    push dx 
-    push di 
+    pusha
+
     mov ax, 0xb800 
     mov es, ax             ; point es to video base 
 
@@ -51,12 +47,7 @@ printnum:
         add di, 2              ; move to next screen location 
         loop nextpos
 
-        pop di 
-        pop dx 
-        pop cx 
-        pop bx 
-        pop ax 
-        pop es
+        popa
         pop bp
         ret 4
  
@@ -65,12 +56,12 @@ KB_ISR:
     push ax 
     in al, 0x60
     
-    ;if not lctrl, check if escape, else toggle timer
+    ; if lctrl, toggle timer. Else, check if escape
     cmp al, 29
     jne isEscape
     xor word [timerFlag], 1
 
-    ;if not escape, pass to original ISR, else exit
+    ;if escape, exit. Else, pass to original ISR
     isEscape:
     cmp al, 0x01
     jne exitKeyboardISR
@@ -84,16 +75,16 @@ KB_ISR:
         pop ax 
         jmp far [cs:oldkb]
 
-;tick timerISR - called 18.2 times every second
+;tick timer ISR - called 18.2 times every second
 TT_ISR:
     push ax 
     cmp word [timerFlag], 1
     jne exitTimerISR
         
-    ;time b/w 2 ticks = 0.0549254s = 54.92ms = 54.92 _s
+    ;time b/w 2 ticks = 0.0549254s = 54.92ms = 54.92_s
     ; 1 second = 1000ms = 100,000 _s where _s is ms*10^2
     ;so now, all we need to do is check if 'ticks' has surpassed
-    ;100,000, and if it has, reset it
+    ;100,000, and if it has, reset it while incrementing seconds
     
     quotientNotMil:
         ;increment ticks
@@ -105,22 +96,22 @@ TT_ISR:
 
         ;inc minute if 60 seconds
         cmp word [seconds], 60
-        jne noMoreInc
+        jne noMoreInc 
         inc word [minutes]
         mov word [seconds], 0
-
-        ;TODO: clear the right-most '9' left from 59
-        ;or somehow figure out a way to pass the number
-        ;of digits to the printnum subroutine
 
         ;inc hour if 60 minutes
         cmp word [minutes], 60
         jne noMoreInc
         inc word [hours]
         mov word [minutes], 0
+
+        ;TODO: clear the '9' left from 59 s/m before inc
+        ;or somehow figure out a way to pass the number
+        ;of digits to the printnum subroutine
     
     noMoreInc:
-        push word 0xe
+        push word 0xE
         push word [seconds]
         call printnum
 

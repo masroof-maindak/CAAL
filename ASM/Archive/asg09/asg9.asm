@@ -1,4 +1,4 @@
-;switches the stack to a new location
+; switches the stack to a new location
 org 100h
 
 jmp start

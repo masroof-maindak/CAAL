@@ -21,15 +21,15 @@ times 14 dw 0
 db 0xFF, 0xFF
 
 alloc:
-    ;the number of bits to alloc is on the stack, so get that first
-    ;put it in ax
+    push bp
+    mov bp, sp
     push bx
     push dx
     push si
     push cx
 
-    mov bp, sp
-    mov ax, [bp+10]
+    push 0xEE      ; exit code in case allocation fails
+    mov ax, [bp+4] ; ax = number of bits to allocate
     
     ;now we must find a chunk of reasonable size from freeChunks
     mov bx, 0
@@ -52,16 +52,18 @@ alloc:
         ;if I reach here, it means that I've found a chunk that can hold
         ;the number of bits I want to tweak
         ;so lets modify this chunk's entry in my freeChunks array
-        ;note that bx is now the offset of my 'good' chunk, from freeChunks
 
-        push word [freeChunks+bx] ;store what bit this chunk starts from
+        ;first, let's 'waste' the exit code we pushed earlier in case alloc failed
+        add sp, 2
+
+        push word [freeChunks+bx] ;store what bit this good chunk starts at
 
         ;we need to subtract the chunk length, since it's going to be reduced
         sub word [freeChunks+bx+2], ax
 
         ;[[now intuitively, if, after the subtraction, the byte denoting length
         ;hits 0, we should remove it, but that would require shifting every value
-        ;that comes after this chunk back two words so I shan't be doing that.
+        ;that comes after this chunk back two words so I shan't be doing that.]]
 
         ;we must also 'forward' the bit index by the number of bits we will fill
         add word [freeChunks+bx], ax
@@ -94,18 +96,17 @@ alloc:
     correctStartByteAcquired:
         xchg bx, si
 
-        ;Therefore:
-        ;   1. bx = in bitfield, offset after which we will pick up a byte
-        ;   2. si = in the byte above, offset after which we will pick a bit
-        ;   3. ax = make this many bits, starting from bit # bl, 1
+    ;Therefore:
+    ;   1. bx = in bitfield, pick up a byte after this many bytes
+    ;   2. si = in the byte above, offset after which we will pick a bit
+    ;   3. ax = make this many bits, starting from bit #si in byte #bx, 1
 
     turningToOne:
-        ;if no more bits left to turn to 1, then (prepare to) leave function
+        ;if no more bits left to turn to 1, then leave function
         cmp ax, 0
         jna onesDone
 
-        ;reset dl (mask) from previous iterations
-        mov dl, 0
+        mov dl, 0 ;reset dl (mask) from previous iteration
 
         ;if ax < 8, then we need to turn some bits on the LEFT side of the byte 1
         ;this also means that it HAS to be the final byte
@@ -118,11 +119,11 @@ alloc:
         ;if ax >= 8, then we need to convert either the right most couple bits
         ;(first byte) or all 8 bits (middle/first/last)
         ;cx = number of bits in this byte to turn 1 = 8 - si
+        ;where si = starting index of bit in this byte
         mov cx, 8
         sub cx, si
 
-        sub ax, cx ;since we will be converting this many bits to 1
-        mov dl, 0  ;reset dl
+        sub ax, cx ;since we will be enabling cx many bits, and ax is the no. of bits left
 
         generateDLmaskNonFinal:
             stc
@@ -130,18 +131,12 @@ alloc:
             loop generateDLmaskNonFinal
 
         ;xor the byte from memory (bitfield+bx) with the mask (dl)
-        push si
-        mov si, bitfield
-        xor [si+bx], dl
-        pop si
+        xor [bitfield+bx], dl
 
         ;after the mask has been generated, then for the FOLLOWING byte
-        inc bx
-
         ;we must start from the very BEGINNING, i.e bit #0, therefore
+        inc bx
         mov si, 0
-
-        ;now, to start over for the next byte
         jmp turningToOne
 
         generateDLmaskFinalByte:
@@ -150,29 +145,27 @@ alloc:
             loop generateDLmaskFinalByte
 
         ;xor the byte from memory (bitfield+bx) with the mask (dl)
-        push si
-        mov si, bitfield
-        xor [si+bx], dl
-        pop si
+        xor [bitfield+bx], dl
 
     onesDone:
-        pop ax ;reclaim the value of the starting bit we pushed earlier
-
+        pop ax ; ax = if failed, ax = EE, else starting index
         pop cx
         pop si
         pop dx
         pop bx
+        pop bp
         ret 2
 
 free:
+    push bp
+    mov bp, sp
     push bx
     push dx
     push si
     push cx
 
-    mov bp, sp
-    mov ax, [bp+10] ;number of bits to free
-    mov bx, [bp+12] ;index of first bit
+    mov ax, [bp+4] ;number of bits to free
+    mov bx, [bp+6] ;index of first bit
 
     ;if the region we are being asked to free overlaps with a free chunk, we exit
     mov si, 0
@@ -180,6 +173,7 @@ free:
     checkForOverlap:
         ;case 1: the ending index of the region I want to free is 
         ;greater than or equal to the start index of this free chunk
+        ;i.e region to free overlaps with the start of a free chunk
         add bx, ax                      ;bx = endIdx (of region to free)
         mov dx, word[freeChunks+si]     ;dx = startIdx (of free chunk)
         cmp bx, dx
@@ -187,6 +181,7 @@ free:
 
         ;case 2: the starting index of a region I want to free is
         ;less than the end index of the free chunk BEHIND me (brain grew 2x)
+        ;i.e region to free overlaps with the end of a free chunk
         sub bx, ax                      ;bx = startIdx (of region to free)
         cmp bx, cx
         jb prematureExit
@@ -218,8 +213,9 @@ free:
         mov word [freeChunks+si+2], ax  ;length of chunk
         jmp swapBack
 
-        prematureExit:  ;to overcome shortjump range issues from somewhere above
-            jmp zeroesDone
+        ;___________________________________________________________________________
+        prematureExit: jmp zeroesDone ;to overcome shortjump range issues from above
+        ;___________________________________________________________________________
 
         ;then, just keep swapping it back based on the starting index
         ;(insertion sort). This is also why we put 0xFFFF before freeChunk
@@ -305,19 +301,13 @@ free:
             loop generateDLmaskNonFinal_2
 
         ;and the byte from memory (bitfield+bx) with the not mask (dl)
-        push si
-        mov si, bitfield
         not dl
-        and [si+bx], dl
-        pop si
+        and [bitfield+bx], dl
 
         ;after the mask has been generated, then for the FOLLOWING byte
-        inc bx
-
         ;we must start from the very BEGINNING, i.e bit #0, therefore
+        inc bx
         mov si, 0
-
-        ;now, to start over for the next byte
         jmp turningToZero
 
         generateDLmaskFinalByte_2:
@@ -326,17 +316,15 @@ free:
             loop generateDLmaskFinalByte_2
 
         ;and the byte from memory (bitfield+bx) with the not mask (dl)
-        push si
-        mov si, bitfield
         not dl
-        and [si+bx], dl
-        pop si
+        and [bitfield+bx], dl
 
     zeroesDone:
         pop cx
         pop si
         pop dx
         pop bx
+        pop bp
         ret 4
 
 start:
