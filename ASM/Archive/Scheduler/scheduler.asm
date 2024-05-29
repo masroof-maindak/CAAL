@@ -51,7 +51,8 @@ get_free_pcb:
 ;reached via retf from user's subroutine
 receive_ret:
     ; deletes curr proc, adjusting LL
-    ; ??
+    ; set curr proc to deleted one's next
+    ; restore new curr proc's registers
     ret
 
 ;receives PCB to insert into dispatcher via ax
