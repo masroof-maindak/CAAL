@@ -1,4 +1,4 @@
-; have two characters move from the row at the 
+; have two characters move from ends of the row at the 
 ; center of the screen to the middle and back again
 org 100h
 
@@ -12,22 +12,21 @@ delay:
     ret
 
 dancingChar:
-    pusha
-    mov di, 1920 ;center
-    mov dh, 0x07
-    mov bp, 158  ;offset
-    mov bx, 0
+    mov di, 1920 ;center row
+    mov dh, 0x07 ;black bg/white fg
+    mov bp, 158  ;end offset - final column
+    xor bx, bx   ;start offset - first column
     movementIn:
-        mov dl, 0x07
-        mov [es:di+bp], dx
+        mov dl, 0x07        ;dl = star
+        mov [es:di+bp], dx  ;place 2 stars
         mov [es:di+bx], dx
         call delay
-        mov dl, 0x20
-        mov [es:di+bp], dx
+        mov dl, 0x20        ;dl = space
+        mov [es:di+bp], dx  ;clear both stars
         mov [es:di+bx], dx
-        sub bp, 2
+        sub bp, 2           ;adjust ptrs
         add bx, 2
-        cmp bx, bp
+        cmp bx, bp          ;exit if pts overlap
         jb movementIn
     movementOut:
         mov dl, 0x07
@@ -41,5 +40,4 @@ dancingChar:
         sub bx, 2
         cmp bx, 0
         ja movementOut
-    popa
     jmp dancingChar

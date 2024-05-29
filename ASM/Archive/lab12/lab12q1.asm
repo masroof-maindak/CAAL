@@ -1,4 +1,4 @@
-;add the numbers at indexes which are multiples of 3
+; Add the numbers at indexes which are multiples of 3
 org 100h
 
 mov ax, 0

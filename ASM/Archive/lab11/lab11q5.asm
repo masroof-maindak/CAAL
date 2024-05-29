@@ -23,7 +23,7 @@ inorder:               ;values are now in order
     
     mov ax, [swap]
     cmp ax, 1
-    je outer          ;loop outer if swap happened
+    je outer           ;loop outer if swap happened
 
 mov ax, 4c00h
 int 21h

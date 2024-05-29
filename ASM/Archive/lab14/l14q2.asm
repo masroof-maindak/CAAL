@@ -39,7 +39,7 @@ highlight:
         pop bp
         ret 4
 
-; subroutine to calculate the length of a string
+; subroutine to calculate the length of a null-terminated string
 ; takes the segment and offset of a string as parameters
 strlen:
     push bp
@@ -48,13 +48,20 @@ strlen:
     push cx
     push di
 
-    les di, [bp+4]
-    mov cx, 0xffff
-    xor al, al
-    repne scasb
+    CLD             ; direction = 0, i.e di is incremented
+    les di, [bp+4]  ;point es:di to string
+    mov cx, 0xffff  ;cx = max
+    xor al, al      ;al = 0
+
+    ; repeat the following while not equal, or cx != 0 :
+        ; 1. inc/dec di depending on D
+        ; 2. decrement cx
+    ; while WHAT is not equal?: the `SCA`nned `S`tring's `B`yte and the value in al
+    repne scasb     
+    
     mov ax, 0xffff
-    sub ax, cx
-    dec ax
+    sub ax, cx      ;ax = FFFF-[FFFF-size]
+    dec ax          ;ax = size-1 (since size includes 0)
     
     pop di
     pop cx

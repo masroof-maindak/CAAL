@@ -21,30 +21,28 @@ newsTicker:
     mov bp, sp
     pusha
 
-    mov ax, 0xb800
+    mov ax, 0xb800  ;point es to video
     mov es, ax
 
-    ;first, place the string there normally
+    ;Place the string on the bottom left of the screen
     cld
     mov ah, 0x07
     mov cx, [bp+6] ; cx = size
     mov si, [bp+4] ; si = string
-    mov di, 3840
+    mov di, 3840   ; di = bottom left
     prntr0:
-        lodsb
-        stosw
+        lodsb      ;load string byte from si into al
+        stosw      ;store string word in ax at es:di
         loop prntr0
 
     ;movement preparation
     mov ax, 0xb800
-    mov ds, ax
-    mov bx, 3840
+    mov ds, ax     ;point ds to video
+    mov bx, 3840   ;bx = bottom left
     mov ah, 0x07
     std
 
     mover:
-        ;si = end of word
-        ;di = end of word + 1
         mov si, bx
         mov cx, [bp+6]
 
@@ -54,9 +52,10 @@ newsTicker:
 
         mov di, si
         add di, 2
-        
-        ;move string
-        rep movsw
+
+        ;si = end of word
+        ;di = end of word + 1
+        rep movsw   ; 'mov string word cx times'
 
         ;clear the first index
         sub di, 2
@@ -78,9 +77,9 @@ newsTicker:
     ret 4
 
 start:
-    push word [stringSize]
+    push word [stringSize]  ;push string size
     mov ax, tickerString
-    push ax
+    push ax                 ;push word address
     
     call newsTicker
 

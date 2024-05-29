@@ -39,7 +39,7 @@ getNext:
     mov bx, ax
     shl bx, 5
     mov ax, [PCB+LL_IND+bx]
-    and ax, 0x00FF  ;to discord 'prev' pointer
+    and ax, 0x00FF  ;to discard 'prev' pointer
     ret
 
 ; loops through all PCBs and returns first free

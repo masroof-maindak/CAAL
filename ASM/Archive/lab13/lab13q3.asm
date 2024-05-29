@@ -2,6 +2,7 @@
 org 100h
 
 mov ax, 5
+sub sp, 2
 push ax
 call fibo
 pop ax
@@ -16,7 +17,7 @@ fibo:
     pusha
     mov ax, [bp+4]  ;ax = arg
 
-    ;base case #1
+    ;fib(0)
         cmp ax, 0
         jne fib1
         mov word [bp+6], 1
