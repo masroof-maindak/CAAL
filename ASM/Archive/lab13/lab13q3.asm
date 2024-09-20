@@ -31,7 +31,7 @@ fibo:
 
     recursive_calls:
         ;fib(n-1), stored in bp-2
-        sub sp, 2       
+        sub sp, 2
         dec ax
         push ax 
         call fibo

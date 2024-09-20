@@ -1,24 +1,24 @@
-;heap allocator - 80 bytes, 400 bits
-;alloc - make that many consecutive bits 1
-;free - makes that many bits, at that starting index, 0
+; heap allocator - 80 bytes, 400 bits
+; alloc - make that many consecutive bits 1
+; free - makes that many bits, at that starting index, 0
 org 100h
-    
+
 ;REAL DECLARATIONS
-; jmp start
-; bitfield: times 50 db 0 ;400 bits for actual data
-; db 0xFF, 0xFF           ;used to stop the insertion sort in swapBack
-; freeChunks: dw 0, 400   ;15 words/240 bits for info
-; times 14 dw 0           ;1st word is starting idx, 2nd is length
-; db 0xFF, 0xFF           ;signifying the end, for self-reference.
+jmp start
+bitfield: times 50 db 0 ;400 bits for actual data
+db 0xFF, 0xFF           ;used to stop the insertion sort in swapBack
+freeChunks: dw 0, 400   ;15 words/240 bits for info
+times 14 dw 0           ;1st word is starting idx, 2nd is length
+db 0xFF, 0xFF           ;signifying the end, for self-reference.
 
 ;TESTING FREE:
-jmp start
-bitfield: times 4 db 0xFF
-times 50 db 0
-db 0xFF, 0xFF
-freeChunks: dw 32, 368
-times 14 dw 0
-db 0xFF, 0xFF
+; jmp start
+; bitfield: times 4 db 0xFF
+; times 50 db 0
+; db 0xFF, 0xFF
+; freeChunks: dw 32, 368
+; times 14 dw 0
+; db 0xFF, 0xFF
 
 alloc:
     push bp
@@ -30,7 +30,7 @@ alloc:
 
     push 0xEE      ; exit code in case allocation fails
     mov ax, [bp+4] ; ax = number of bits to allocate
-    
+
     ;now we must find a chunk of reasonable size from freeChunks
     mov bx, 0
     checkIfFits:
@@ -75,10 +75,10 @@ alloc:
 
         ;Currently, ax currently houses the number of bits I want to turn 1
         ;and bx holds the offset from from where I can start turning bits 1
-        
-        ;since my granularity is that of a byte, 
+
+        ;since my granularity is that of a byte,
         ;I must first load the BYTE which contains BIT # bx
-        ;how can I get this byte though? Keep counting up 
+        ;how can I get this byte though? Keep counting up
         ;starting from 0, while the startIdx > 8
 
     push bx ;since we are required to return the first bit's index in ax
@@ -92,7 +92,7 @@ alloc:
         inc si
         sub bx, 8
         jmp getStartByteNumber
-    
+
     correctStartByteAcquired:
         xchg bx, si
 
@@ -164,14 +164,14 @@ free:
     push si
     push cx
 
-    mov ax, [bp+4] ;number of bits to free
-    mov bx, [bp+6] ;index of first bit
+    mov ax, [bp+4] ; number of bits to free
+    mov bx, [bp+6] ; index of first bit
 
     ;if the region we are being asked to free overlaps with a free chunk, we exit
     mov si, 0
     mov cx, 0 ; prevFreeChunksEndingIndex
     checkForOverlap:
-        ;case 1: the ending index of the region I want to free is 
+        ;CASE 1: the ending index of the region I want to free is
         ;greater than or equal to the start index of this free chunk
         ;i.e region to free overlaps with the start of a free chunk
         add bx, ax                      ;bx = endIdx (of region to free)
@@ -179,7 +179,7 @@ free:
         cmp bx, dx
         jae prematureExit
 
-        ;case 2: the starting index of a region I want to free is
+        ;CASE 2: the starting index of a region I want to free is
         ;less than the end index of the free chunk BEHIND me (brain grew 2x)
         ;i.e region to free overlaps with the end of a free chunk
         sub bx, ax                      ;bx = startIdx (of region to free)
@@ -218,7 +218,7 @@ free:
         ;___________________________________________________________________________
 
         ;then, just keep swapping it back based on the starting index
-        ;(insertion sort). This is also why we put 0xFFFF before freeChunk
+        ;(insertion sort). This is also why we put 0xFFFF before freeChunks
         swapBack:
             mov dx, word [freeChunks+si]
             cmp dx, word [freeChunks+si-4] ;cmp {inserted idx}, {idx behind}
@@ -251,7 +251,7 @@ free:
         inc si
         sub bx, 8
         jmp getStartByteNumber_2
-    
+
     correctStartByteAcquired_2:
         xchg bx, si
 
@@ -266,7 +266,7 @@ free:
         jna zeroesDone
 
         ;reset dl (mask) from previous iterations
-        mov dl, 0
+		xor dx, dx
 
         ;if ax < 8, then we need to turn some bits on the LEFT side of the byte 1
         ;this also means that it HAS to be the final byte
@@ -283,13 +283,13 @@ free:
         sub cx, si
 
         sub ax, cx ;since we will be converting this many bits to 1
-        mov dl, 0  ;reset dl
+		xor dx, dx
 
         ;MASK
         ; 1 - turn this bit to 0
         ; 0 - do not do anything to this bit
 
-        ;to do what free does, we must perform [mem and not mask]
+        ;to do what free does, we must perform [mem & not(mask)]
         ;       mem: 1100
         ;      mask: 1100
         ;     !mask: 0011
@@ -307,7 +307,7 @@ free:
         ;after the mask has been generated, then for the FOLLOWING byte
         ;we must start from the very BEGINNING, i.e bit #0, therefore
         inc bx
-        mov si, 0
+		xor si, si
         jmp turningToZero
 
         generateDLmaskFinalByte_2:
@@ -315,7 +315,7 @@ free:
             rcr dl, 1
             loop generateDLmaskFinalByte_2
 
-        ;and the byte from memory (bitfield+bx) with the not mask (dl)
+        ;AND the byte from memory (bitfield+bx) with the not mask (dl)
         not dl
         and [bitfield+bx], dl
 
@@ -328,16 +328,15 @@ free:
         ret 4
 
 start:
+    ; Alloc
+    push 7
+    call alloc
+    push 9
+    call alloc
 
-    ;testing alloc
-    ; push 7
-    ; call alloc
-    ; push 9
-    ; call alloc
-
-    ;testing free
-    push 0  ;bit index
-    push 4  ;length
+    ; Free
+    push 0  ; bit index
+    push 4  ; length
     call free
 
 exit:

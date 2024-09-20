@@ -1,6 +1,8 @@
 ; Print a rectangle with dimensions passed as arguments
 org 100h
+
 jmp start
+
 printRect:
     push bp
     mov bp, sp
@@ -8,7 +10,7 @@ printRect:
 
     mov ax, 0xb800
     mov es, ax
-    
+
     ;dimensions
     mov ax, [bp+4]
     mov cx, [bp+6]
@@ -37,5 +39,6 @@ start:
     push 10
     push 5
     call printRect
+
     mov ax, 4c00h
     int 21h

@@ -1,4 +1,4 @@
-; have two characters move from ends of the row at the 
+; have two characters move from ends of the row at the
 ; center of the screen to the middle and back again
 org 100h
 

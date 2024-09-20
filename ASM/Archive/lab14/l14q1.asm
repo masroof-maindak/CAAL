@@ -61,13 +61,13 @@ newsTicker:
         sub di, 2
         mov al, 0x20
         stosw
-        
+
         ;next index
         call Delay
         add bx, 2
         cmp bx, 4000
         jne mover
-    
+	
     ; Clear the one character left
     mov di, 3998
     stosw
@@ -80,7 +80,7 @@ start:
     push word [stringSize]  ;push string size
     mov ax, tickerString
     push ax                 ;push word address
-    
+
     call newsTicker
 
     mov ax, 4c00h

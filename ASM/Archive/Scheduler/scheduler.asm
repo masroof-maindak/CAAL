@@ -35,7 +35,7 @@ IP_IND: EQU 30
 
 ; receieves current process in ax
 ; returns in ax the next PCB's number
-getNext:
+get_next:
     mov bx, ax
     shl bx, 5
     mov ax, [PCB+LL_IND+bx]
@@ -58,21 +58,21 @@ receive_ret:
 ;receives PCB to insert into dispatcher via ax
 insert_thread:
     push ax
-    mov bx, ax              ;bx = new
-    shl bx, 5               ;bx = new's PCB
+    mov bx, ax              ; bx = new
+    shl bx, 5               ; bx = new's PCB
 
-    xor ax, ax              ;ax = 0
-    call getNext            ;ax = 0:0's next
-    mov [PCB+LL_IND+bx], ax ;new's prev/next = 0/0's next
-    mov bx, ax;             ;bx = 0's next
-    shl bx, 5;              ;bx = 0's next's PCB
+    xor ax, ax              ; ax = 0
+    call getNext            ; ax = 0:0's next
+    mov [PCB+LL_IND+bx], ax ; new's prev/next = 0/0's next
+    mov bx, ax;             ; bx = 0's next
+    shl bx, 5;              ; bx = 0's next's PCB
 
     pop ax ; ax = new
-    mov byte [PCB+LL_IND+bx], al ;0's next's prev = new
-    mov byte [PCB+LL_IND+1], al  ;0's next = new
+    mov byte [PCB+LL_IND+bx], al ; 0's next's prev = new
+    mov byte [PCB+LL_IND+1], al  ; 0's next = new
     ret
 
-;receives pcb # to init in ax
+; receives pcb # to init in ax
 init_pcb:
     push bp
     mov bp, sp
@@ -87,7 +87,7 @@ init_pcb:
     ; si to access stacks
     mov si, ax
     shl si, 9
-    add si, 510 ;move to bottom
+    add si, 510 ; move to bottom
 
     ; Init general purpose registers
     xor ax, ax
@@ -102,7 +102,7 @@ init_pcb:
     mov word [PCB+BP_IND+bx], ax
     mov word [PCB+DS_IND+bx], ax
     mov word [PCB+ES_IND+bx], ax
-    mov word [PCB+FLAG_IND+bx], 0x0200 ; ensure interrupt flag is 1
+    mov word [PCB+FLAG_IND+bx], 0x0200 ; ensure interrupt flag is high
     mov word [PCB+SS_IND+bx], stacks
 
     ; get IP and CS from stack
@@ -110,10 +110,10 @@ init_pcb:
     mov [PCB+IP_IND+bx], ax
     mov ax, [bp+12]
     mov [PCB+CS_IND+bx], ax
-    mov 
-    
-    ;'push' this thread's original argument (i.e a void* comprising  
-    ;a segment-offset pair) to its newly allocated stack
+    mov
+
+    ; 'push' this thread's original argument (i.e a void* comprising
+    ; a segment-offset pair) to its newly allocated stack
     mov ax, [bp+16]
     mov word [stacks+si], ax
     sub si, 2
@@ -121,9 +121,9 @@ init_pcb:
     mov word [stacks+si], ax
     sub si, 2
 
-    ;'push' the segment and address of where the program should go
-    ;if it calls for 'ret' - i.e our handler function that deletes the thread
-    ;note: assumes user uses RETF
+    ; 'push' the segment and address of where the program should go
+    ; if it calls for 'ret' - i.e our handler function that deletes the thread
+    ; NOTE: assumes user uses RETF
     mov [stacks+si], cs
     sub si, 2
     mov [stacks+si], receive_ret
@@ -170,8 +170,7 @@ int08isr:
     call getNext       ;ax = next
     mov word [currProc], ax
     mov bx, ax
-    shl bx, 5
-    
+
     ;RESTORE
     ;stack registers
     cli
@@ -198,7 +197,7 @@ int08isr:
     mov ds, [PCB+DS_IND+bx]
     mov es, [PCB+ES_IND+bx]
 
-    ;EoI + restore ax, bx + leave
+    ;EoI + restore ax & bx + leave
     mov al, 0x20
     out 0x20, al
     mov ax, [PCB+AX_IND+bx]
@@ -213,9 +212,9 @@ int21isr:
     ; exit if below 10
     cmp al, 0x10
     jbe oldINT21
-    
+
     createCheck:
-        cmp al, 0x10 
+        cmp al, 0x10
         jne deleteCheck
         ;check thread count and exit if >= 16
         ;call get_free_pcb
@@ -225,7 +224,7 @@ int21isr:
         iret 8 ;need to iret from here to waste args unlike others
 
     deleteCheck: ; remove prev/next's LL pointers to/from this one + enable 'avlbl' flag
-        cmp al, 0x10 
+        cmp al, 0x10
         jne suspendCheck
         ; if trying to delete 0 or >= 16, exit
         call delete_thread
@@ -240,7 +239,7 @@ int21isr:
         jmp exitINT21
 
     resumeCheck: ; add this one to prev/next's LL pointers
-        cmp al, 0x10 
+        cmp al, 0x10
         jne oldINT21
         ; if trying to resume 0 or >= 16, exit
         call resume_thread
@@ -254,7 +253,7 @@ int21isr:
         jmp [old21]
 
 start:
-    xor ax, ax 
+    xor ax, ax
     mov es, ax
 
     ;store original ISRs
@@ -262,7 +261,7 @@ start:
     mov dword [oldtt], eax
     mov eax, [es:21*4]
     mov dword [old21], eax
-    
+
     ;Replace ISRs
     cli
     mov word [es:8*4+2], cs
