@@ -23,7 +23,7 @@ Q2 [10]: Assume you have a list of words in memory, sorted contiguously in ascen
 
 ---
 
-Q3 [05]: (BONUS) If the if condition from question #1 were `x % 2` instead, would it get compiled to a more efficient solution? Justify your answer (~2 lines).
+Q3 [05]: (BONUS) If the if condition from question #1 were `x % 2` instead, could it get compiled to a more efficient solution? Justify your answer (~2 lines).
 
 ---
 
