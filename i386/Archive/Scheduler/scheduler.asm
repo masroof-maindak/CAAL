@@ -1,5 +1,5 @@
 ; Scheduler
-org 100h
+org 0x100
 jmp start
 
 oldtt: dd 0
@@ -166,6 +166,7 @@ int08isr:
     mov word [PCB+SS_IND+bx], ss
     mov word [PCB+SP_IND+bx], sp
 
+	; Get ID of the next process
     mov ax, [currProc]
     call getNext
     mov word [currProc], ax
@@ -211,7 +212,7 @@ int21isr:
 
     ; exit if below 10
     cmp al, 0x10
-    jbe oldINT21
+    jb oldINT21
 
     createCheck:
         cmp al, 0x10
@@ -270,7 +271,7 @@ start:
     mov word [es:21*4], int21isr
     sti
 
-    ; TSR				
+	; TSR
     mov dx, start
     add dx, 15
     mov cl, 4

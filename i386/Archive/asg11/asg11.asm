@@ -3,17 +3,17 @@ org 100h
 
 jmp start
 
-;timekeeping
+; Timekeeping
 ticks: dd 0
 seconds: dw 0
 minutes: dw 0
 hours: dw 0
 
-;flags
+; Flags
 timerFlag: dw 0
 terminateFlag: dw 0
 
-;store original ISRs
+; Store original ISRs
 oldkb: dd 0
 oldtt: dd 0
 
@@ -28,6 +28,7 @@ printnum:
     mov ax, [bp+4]         ; load number in ax
     mov bx, 10             ; use base 10 for division
     mov cx, 0              ; initialize count of digits
+
     nextdigit:
         mov dx, 0              ; zero upper half of dividend
         div bx                 ; divide by 10
@@ -38,6 +39,8 @@ printnum:
         cmp ax, 0              ; is the quotient zero
         jnz nextdigit          ; if not, divide it again
 
+		push 0
+		inc cx
         mov di, 140            ; point di to 70th column + offset
         add di, [bp+6]
     nextpos:
@@ -51,66 +54,72 @@ printnum:
         pop bp
         ret 4
 
-;keyboard ISR - called every time a key is pressed
+; Keyboard ISR - called every time a key is pressed
 KB_ISR:
     push ax
     in al, 0x60
 
-    ; if lctrl, toggle timer. Else, check if escape
+	is_lctrL:
     cmp al, 29
-    jne isEscape
+    jne is_esc
     xor word [timerFlag], 1
+	jmp exit_kb_isr
 
-    ;if escape, exit. Else, pass to original ISR
-    isEscape:
+    is_esc:
     cmp al, 0x01
-    jne exitKeyboardISR
+	jne goto_original_kb_isr
     mov word [terminateFlag], 1
+	jmp exit_kb_isr
+	
+    goto_original_kb_isr:
+	pop ax
+	jmp far [cs:oldkb]
+
+	exit_kb_isr:
     mov al, 0x20
     out 0x20, al
     pop ax
     iret
 
-    exitKeyboardISR:
-        pop ax 
-        jmp far [cs:oldkb]
-
-;tick timer ISR - called 18.2 times every second
+; tick timer ISR - called 18.2 times every second
 TT_ISR:
     push ax
     cmp word [timerFlag], 1
-    jne exitTimerISR
+    jne exit_timer_isr
 
-    ;time b/w 2 ticks = 0.0549254s = 54.92ms = 54.92_s
-    ; 1 second = 1000ms = 100,000 _s where 1 _s is ms*10^2
-    ;so now, all we need to do is check if 'ticks' has surpassed
-    ;100,000, and if it has, reset it while incrementing seconds
+    ; time b/w 2 ticks = 0.0549254s = 54.92ms
+    ; 1 second = 1000ms = 100,000 xs where 1 xs is a ms * 100
+	; We do this to convert 54.92 to 5492, allowing for greater precision
 
-    quotientNotMil:
-        ;increment ticks
-        add dword [ticks], 5492
-        cmp dword [ticks], 100000
-        jnae noMoreInc
-        inc word [seconds]
-        sub dword [ticks], 100000
+    ; so now, all we need to do is check if 'ticks' has surpassed
+    ; 100,000, and if it has, reset it while incrementing seconds
 
-        ;inc minute if 60 seconds
-        cmp word [seconds], 60
-        jne noMoreInc
-        inc word [minutes]
-        mov word [seconds], 0
+	; Increment ticks & seconds
+	add dword [ticks], 5492
+	cmp dword [ticks], 100000
+	jnae no_more_increments
+	inc word [seconds]
+	sub dword [ticks], 100000
+	; I could (should)  do this with `div`
+	; Not that it matters really
 
-        ;inc hour if 60 minutes
-        cmp word [minutes], 60
-        jne noMoreInc
-        inc word [hours]
-        mov word [minutes], 0
+	; Inc minute if 60 seconds
+	cmp word [seconds], 60
+	jne no_more_increments
+	inc word [minutes]
+	mov word [seconds], 0
 
-        ; TODO: clear the '9' left from 59 s/m before inc
-        ; or somehow figure out a way to pass the number
-        ; of digits to the printnum subroutine
+	; Inc hour if 60 minutes
+	cmp word [minutes], 60
+	jne no_more_increments
+	inc word [hours]
+	mov word [minutes], 0
 
-    noMoreInc:
+	; TODO: clear the '9' left behind from the 59th s or m
+	; prior to incrementing them or modify the printnum
+	; subroutine to print a zero before single-digit numbers
+
+    no_more_increments:
         push word 0xE
         push word [seconds]
         call printnum
@@ -123,24 +132,24 @@ TT_ISR:
         push word [hours]
         call printnum
 
-    exitTimerISR:
+    exit_timer_isr:
         mov al, 0x20
         out 0x20, al
         pop ax
         iret
 
 start:
-    ;es = 0
-    xor ax, ax 
+    ; es = 0 (IVT)
+    xor ax, ax
     mov es, ax
 
-    ;store old ISR
+    ; Store original ISRs
     mov eax, [es:8*4]
     mov dword [oldtt], eax
     mov eax, [es:9*4]
     mov dword [oldkb], eax
 
-    ;override w/ custom hook(s)
+    ; Hook keyboard and timer w/ our ISRs
     cli
     mov word [es:8*4+2], cs
     mov word [es:9*4+2], cs
@@ -148,18 +157,19 @@ start:
     mov word [es:9*4], KB_ISR
     sti
 
-    shouldTerm:
+	; Busy wait till user says they're done
+    termination_check:
         cmp word [terminateFlag], 1
-        jne shouldTerm
+        jne termination_check
 
-        ;Recover original subroutines
-        cli
-        mov eax, [cs:oldkb]
-        mov dword [es:9*4], eax
-        mov eax, [cs:oldtt]
-        mov dword [es:8*4], eax
-        sti
+	; Recover original ISRs
+	cli
+	mov eax, [cs:oldkb]
+	mov dword [es:9*4], eax
+	mov eax, [cs:oldtt]
+	mov dword [es:8*4], eax
+	sti
 
-        ;Terminate gracefully
-        mov ax, 4c00h
-        int 21h
+	; Terminate gracefully
+	mov ax, 4c00h
+	int 21h

@@ -72,7 +72,7 @@ int08isr:
     mov [currProc], ax
     mov bx, ax
     shl bx, 5
-    
+	
     ;RESTORE
     ;stack registers
     cli
@@ -109,13 +109,13 @@ int08isr:
     iret
 
 start:
-    xor ax, ax 
+    xor ax, ax
     mov es, ax
 
     ;store old ISR
     mov eax, [es:8*4]
     mov dword [oldtt], eax
-    
+
     ;Replace ISR
     cli
     mov word [es:8*4+2], cs
