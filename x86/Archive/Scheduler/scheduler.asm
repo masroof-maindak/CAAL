@@ -110,7 +110,6 @@ init_pcb:
     mov [PCB+IP_IND+bx], ax
     mov ax, [bp+12]
     mov [PCB+CS_IND+bx], ax
-    mov
 
     ; 'push' this thread's original argument (i.e a 'void*' comprising
     ; a segment-offset pair) to its newly allocated stack
