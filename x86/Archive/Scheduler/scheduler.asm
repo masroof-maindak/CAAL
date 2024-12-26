@@ -1,61 +1,70 @@
 ; Scheduler
+; This code isn't complete/functional strictly speaking but is well-documented
+; and contains extensive instructions and guidance towards completion/a deeper
+; understanding of developing a userspace multi-tasking 'kernel'
+
 org 0x100
 jmp start
 
 oldtt: dd 0
 old21: dd 0
-PCB: times 16*16 dw 0     ; process control block - for 32 bytes/thread
-stacks: times 256*16 dw 0 ; 512 bytes per stack per program
-currProc: dw 0            ; PCB number of currently active process
-threadCount: dw 1         ; no. of active threads (i.e freFlag = 1)
 
-;structure of one chunk in the PCB:
-; 02 bytes - prev/next pointers
-; 01 byte  - free flag (i.e not dead)
-; 01 byte  - priority
-; 28 bytes - general purpose registers
+PCB: times 32*16 db 0     ; process control block - for 32 bytes/thread
+stacks: times 512*16 db 0 ; 512 bytes per stack per program
+currproc: dw 0			  ; PCB number of currently active process
+threadcount: dw 1		  ; no. of active threads (i.e free flag != 1)
 
-LL_IND: EQU 0
-freFlg: EQU 2
-PR_IND: EQU 3
-AX_IND: EQU 4
-BX_IND: EQU 6
-CX_IND: EQU 8
-DX_IND: EQU 10
-SI_IND: EQU 12
-DI_IND: EQU 14
-BP_IND: EQU 16
-SP_IND: EQU 18
-CS_IND: EQU 20
-DS_IND: EQU 22
-ES_IND: EQU 24
-SS_IND: EQU 26
-FLAG_IND: EQU 28
-IP_IND: EQU 30
+; Structure of one chunk in the PCB:
+;	02 bytes - prev/next pointers
+;	01 byte  - free flag (i.e not dead)
+;	01 byte  - priority
+;	28 bytes - general purpose registers
 
-; receieves current process in ax
-; returns in ax the next PCB's number
+LL_SAVE: EQU 0
+FREE_FLAG: EQU 2
+PR_SAVE: EQU 3
+AX_SAVE: EQU 4
+BX_SAVE: EQU 6
+CX_SAVE: EQU 8
+DX_SAVE: EQU 10
+SI_SAVE: EQU 12
+DI_SAVE: EQU 14
+BP_SAVE: EQU 16
+SP_SAVE: EQU 18
+CS_SAVE: EQU 20
+DS_SAVE: EQU 22
+ES_SAVE: EQU 24
+SS_SAVE: EQU 26
+FLAG_SAVE: EQU 28
+IP_SAVE: EQU 30
+
+; @brief receives current process in ax
+; @return (in ax) the next PCB's number
 get_next:
+	; Priority handling?
+	; Maintain another global variable for the current tick count (init w/ 0)
+	; If the tick count is equal to the currproc's priority, then reset it and get
+	; the next free PCB; else, increment tick count (can be optimised further to
+	; prevent unnecessary restores)
     mov bx, ax
     shl bx, 5
-    mov ax, [PCB+LL_IND+bx]
-    and ax, 0x00FF  ;to discard 'prev' pointer
+    mov ax, [PCB+LL_SAVE+bx]
+    and ax, 0x00FF  ; to discard the 'prev' pointer
     ret
 
-; loops through all PCBs and returns first free
-; PCB's number in ax. Places ff if no free found
-; Assumes thread_count is within bounds
+; @brief loops through all PCBs and finds the first free one
+; @return PCB's number (in ax), or 0xFF if no free entry
 get_free_pcb:
+	; TODO
     ret
 
-;reached via retf from user's subroutine
 receive_ret:
-    ; deletes curr proc, adjusting LL
-    ; set curr proc to deleted one's next
-    ; restore new curr proc's registers
+    ; This function exists to serve as a fake 'return address'
+    ; Reached via retf from user's subroutine (whether maliciously or accidentally)
+    ; Maybe just have this delete the thread that triggered landing into it ?
     ret
 
-;receives PCB to insert into dispatcher via ax
+; Receives PCB entry to insert into the dispatcher (linked list) via ax
 insert_thread:
     push ax
     mov bx, ax              ; bx = new
@@ -63,22 +72,42 @@ insert_thread:
 
     xor ax, ax              ; ax = 0
     call getNext            ; ax = 0:0's next
-    mov [PCB+LL_IND+bx], ax ; new's prev/next = 0/0's next
+    mov [PCB+LL_SAVE+bx], ax ; new's prev|next = 0|0's next
     mov bx, ax;             ; bx = 0's next
     shl bx, 5;              ; bx = 0's next's PCB
 
     pop ax ; ax = new
-    mov byte [PCB+LL_IND+bx], al ; 0's next's prev = new
-    mov byte [PCB+LL_IND+1], al  ; 0's next = new
+    mov byte [PCB+LL_SAVE+bx], al ; 0's next's prev = new
+    mov byte [PCB+LL_SAVE+1], al  ; 0's next = new
     ret
 
-; receives pcb # to init in ax
+; @brief receives pcb # to init in ax.
+; @detail it cleans up the registers, copies over the argument's address to the stack
+; and sets a fake return address
 init_pcb:
+	
     push bp
     mov bp, sp
     push ax
     push si
     push bx
+
+	; At this point, we expect the following stack layout:
+	;
+	; 	| BX					 | -6
+	; 	| SI					 | -4
+	; 	| AX					 | -2
+	; ->| BP (Original)			 | 	<-BP
+	; 	| IP (int21 -> init_pcb) | +2
+	; 	| IP	}				 | +4
+	; 	| CS	} int21			 | +6
+	; 	| FLAG	}				 | +8
+	; 	| offset	} entrypoint | +10
+	;	| segment	}			 | +12
+	; 	| offset	} void* arg	 | +14
+	;	| segment	}			 | +16
+	; 	|________________________|
+
 
     ; bx to access PCBs
     mov bx, ax
@@ -91,28 +120,29 @@ init_pcb:
 
     ; Init general purpose registers
     xor ax, ax
-    mov byte [PCB+freFlg+bx], al
-    mov byte [PCB+PR_IND+bx], al
-    mov word [PCB+AX_IND+bx], ax
-    mov word [PCB+BX_IND+bx], ax
-    mov word [PCB+CX_IND+bx], ax
-    mov word [PCB+DX_IND+bx], ax
-    mov word [PCB+SI_IND+bx], ax
-    mov word [PCB+DI_IND+bx], ax
-    mov word [PCB+BP_IND+bx], ax
-    mov word [PCB+DS_IND+bx], ax
-    mov word [PCB+ES_IND+bx], ax
-    mov word [PCB+FLAG_IND+bx], 0x0200 ; ensure interrupt flag is high
-    mov word [PCB+SS_IND+bx], stacks
+    mov byte [PCB+FREE_FLAG+bx], al
+    mov byte [PCB+PR_SAVE+bx], al
+    mov word [PCB+AX_SAVE+bx], ax
+    mov word [PCB+BX_SAVE+bx], ax
+    mov word [PCB+CX_SAVE+bx], ax
+    mov word [PCB+DX_SAVE+bx], ax
+    mov word [PCB+SI_SAVE+bx], ax
+    mov word [PCB+DI_SAVE+bx], ax
+    mov word [PCB+BP_SAVE+bx], ax
+    mov word [PCB+DS_SAVE+bx], ax
+    mov word [PCB+ES_SAVE+bx], ax
+    mov word [PCB+FLAG_SAVE+bx], 0x0200 ; ensure interrupt flag is high
+    mov word [PCB+SS_SAVE+bx], stacks	; start of all contiguous stacks
 
-    ; get IP and CS from stack
+    ; get thread's entrypoint from the stack
     mov ax, [bp+10]
-    mov [PCB+IP_IND+bx], ax
+    mov [PCB+IP_SAVE+bx], ax
     mov ax, [bp+12]
-    mov [PCB+CS_IND+bx], ax
+    mov [PCB+CS_SAVE+bx], ax
 
-    ; 'push' this thread's original argument (i.e a 'void*' comprising
-    ; a segment-offset pair) to its newly allocated stack
+    ; 'push' a pointer to thread's intended argument (i.e a 'void* arg'
+    ; that the thread's start routine can then parse as per its logic)
+	; to its newly allocated stack
     mov ax, [bp+16]
     mov word [stacks+si], ax
     sub si, 2
@@ -122,12 +152,24 @@ init_pcb:
 
     ; 'push' the segment and address of where the program should go
     ; if it calls for 'ret' - i.e our handler function that deletes the thread
-    ; NOTE: assumes user uses RETF
+	; The purpose is to NOT let an arbitrary ret in the function go to a random
+	; address as that could result in undefined behaviour and shut down our system
+	; in the worst case scenario
     mov [stacks+si], cs
     sub si, 2
     mov [stacks+si], receive_ret
+    ; NOTE: assumes user uses RETF
 
-    mov [PCB+SP_IND+bx], si
+	; Init stack pointer
+    mov [PCB+SP_SAVE+bx], si
+
+	; Thread's newly allocated stack:
+	;
+	;	| ret addr offset	| 504
+	; 	| ret addr segment	| 506
+	;	| void* arg offset	| 508
+	;	| void* arg segment | 510
+	;	|___________________|
 
     pop bx
     pop si
@@ -137,71 +179,71 @@ init_pcb:
 
 int08isr:
     push bx
-    mov bx, [currProc]
+    mov bx, [currproc]
     shl bx, 5
 
-    ; STORE
+    ; 1. SAVE STATE
     ; general purpose registers
-    mov word [PCB+AX_IND+bx], ax
+    mov word [PCB+AX_SAVE+bx], ax
     pop ax
-    mov word [PCB+BX_IND+bx], ax
-    mov word [PCB+CX_IND+bx], cx
-    mov word [PCB+DX_IND+bx], dx
-    mov word [PCB+SI_IND+bx], si
-    mov word [PCB+DI_IND+bx], di
-    mov word [PCB+BP_IND+bx], bp
-    mov word [PCB+DS_IND+bx], ds
-    mov word [PCB+ES_IND+bx], es
+    mov word [PCB+BX_SAVE+bx], ax
+    mov word [PCB+CX_SAVE+bx], cx
+    mov word [PCB+DX_SAVE+bx], dx
+    mov word [PCB+SI_SAVE+bx], si
+    mov word [PCB+DI_SAVE+bx], di
+    mov word [PCB+BP_SAVE+bx], bp
+    mov word [PCB+DS_SAVE+bx], ds
+    mov word [PCB+ES_SAVE+bx], es
 
     ; iret relevant registers
     pop ax
-    mov word [PCB+IP_IND+bx], ax
+    mov word [PCB+IP_SAVE+bx], ax
     pop ax
-    mov word [PCB+CS_IND+bx], ax
+    mov word [PCB+CS_SAVE+bx], ax
     pop ax
-    mov word [PCB+FLAG_IND+bx], ax
+    mov word [PCB+FLAG_SAVE+bx], ax
 
     ; stack relevant registers
-    mov word [PCB+SS_IND+bx], ss
-    mov word [PCB+SP_IND+bx], sp
+    mov word [PCB+SS_SAVE+bx], ss
+    mov word [PCB+SP_SAVE+bx], sp
 
-	; Get ID of the next process
-    mov ax, [currProc]
+	; 2. Get ID of the next process
+    mov ax, [currproc]
     call getNext
-    mov word [currProc], ax
+    mov word [currproc], ax
     mov bx, ax
 
-    ; RESTORE
+    ; 3. RESTORE STATE
     ; stack registers
     cli
-    mov ax, [PCB+SS_IND+bx]
+    mov ax, [PCB+SS_SAVE+bx]
     mov ss, ax
-    mov ax, [PCB+SP_IND+bx]
+    mov ax, [PCB+SP_SAVE+bx]
     mov sp, ax
     sti
 
     ; iret relevant registers
-    mov ax, [PCB+FLAG_IND+bx]
+    mov ax, [PCB+FLAG_SAVE+bx]
     push ax
-    mov ax, [PCB+CS_IND+bx]
+    mov ax, [PCB+CS_SAVE+bx]
     push ax
-    mov ax, [PCB+IP_IND+bx]
+    mov ax, [PCB+IP_SAVE+bx]
     push ax
 
     ; General purpose registers
-    mov cx, [PCB+CX_IND+bx]
-    mov dx, [PCB+DX_IND+bx]
-    mov si, [PCB+SI_IND+bx]
-    mov di, [PCB+DI_IND+bx]
-    mov bp, [PCB+BP_IND+bx]
-    mov ds, [PCB+DS_IND+bx]
-    mov es, [PCB+ES_IND+bx]
+    mov cx, [PCB+CX_SAVE+bx]
+    mov dx, [PCB+DX_SAVE+bx]
+    mov si, [PCB+SI_SAVE+bx]
+    mov di, [PCB+DI_SAVE+bx]
+    mov bp, [PCB+BP_SAVE+bx]
+    mov ds, [PCB+DS_SAVE+bx]
+    mov es, [PCB+ES_SAVE+bx]
 
     ; EoI + restore ax & bx + leave
     mov al, 0x20
     out 0x20, al
-    mov ax, [PCB+AX_IND+bx]
-    mov bx, [PCB+BX_IND+bx]
+    mov ax, [PCB+AX_SAVE+bx]
+    mov bx, [PCB+BX_SAVE+bx]
     iret
 
 int21isr:
@@ -221,9 +263,9 @@ int21isr:
         call init_pcb
         call insert_thread
         add word [thread_count], 1
-        iret 8 ;need to iret from here to waste args unlike others
+        iret 8 ; Clean user args (entrypoint & void* segment-offset pair)
 
-    deleteCheck: ; remove prev/next's LL pointers to/from this one + enable 'avlbl' flag
+    deleteCheck: ; remove from dispatcher + set 'free' flag
         cmp al, 0x11
         jne suspendCheck
         ; if trying to delete '0' or >= 16, exit
@@ -231,22 +273,21 @@ int21isr:
         sub word [thread_count], 1
         jmp exitINT21
 
-    suspendCheck: ; remove prev/next's LL pointers to/from this one
+    suspendCheck: ; remove from dispatcher (w/o modifying the free flag)
         cmp al, 0x12
         jne resumeCheck
         ; if trying to suspend '0' or >= 16, exit
         call suspend_thread
         jmp exitINT21
 
-    resumeCheck: ; add this one to prev/next's LL pointers
+    resumeCheck: ; Shrimply insert the thread back into the linked list (dispatcher)
         cmp al, 0x13
         jne oldINT21
         ; if trying to resume '0' or >= 16, exit
         call resume_thread
 
     exitINT21:
-		; CHECK: do I need to send EoI for i21?
-        ; ax SHOULD have ff for failure, ee for success, or PCB no. if insertion
+		; TODO: ax should have 0xFF for failure, 0xEE (or PCB no. if insert) for success
         iret
 
     oldINT21:
